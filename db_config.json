@@ -1,0 +1,11 @@
+{
+    "host": "192.168.10.114",
+    "port": 3306,
+    "user": "root",
+    "password": "12345678",
+    "database": "prism_db",
+    "table": "product_variants",
+    "check_column": "id",
+    "hive_database": "hive_example",
+    "warehouse_dir": "/user/hive/warehouse"
+}
