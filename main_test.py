@@ -1,12 +1,6 @@
 import os
-import subprocess
 from confluent_kafka import Consumer, KafkaException, KafkaError
-
-import json
-import logging
-import logging
 from hive_connection import create_connection
-from model.schems import Schema,Table,Column
 from schema_collector import SchemaCollector
 from schema_consumer import create_single_partitioned_hive_table
 from table_data_consumer import * 
@@ -14,20 +8,20 @@ from table_data_consumer import *
 # Kafka Configuration
 KAFKA_SERVER = 'localhost:9092'
 TOPIC_NAME = 'data'
-CHUNK_FOLDER = '/tmp/voucher_products/'  # Temporary folder for storing file chunks
-MERGED_FILE_PATH = '/tmp/voucher_products.orc'  # Path for the merged ORC file
-HDFS_PATH = '/user/hive/warehouse/voucher_products.orc'
-HIVE_TABLE_NAME = 'voucher_products'
+CHUNK_FOLDER = '/tmp/orcdata/'  # Temporary folder for storing file chunks
+MERGED_FILE_PATH = ''  # Path for the merged ORC file
+HDFS_PATH = ''
+HIVE_TABLE_NAME = ''
 
 
 def main():
     received_chunks = 0
     # Connect to Hive (not used in this simplified version)
-    conn, cursor = create_connection()
+    conn, cursor = create_connection("prism")
 
     # Configure Kafka consumer
     consumer_config = {
-        'bootstrap.servers': '192.168.10.114:9092',  # Kafka broker address
+        'bootstrap.servers': '192.168.10.250:9092',  # Kafka broker address
         'group.id': 'group-id',                 # Consumer group ID
         'auto.offset.reset': 'earliest',          # Start reading from the earliest message
         'fetch.message.max.bytes': 5242880
@@ -86,7 +80,10 @@ def main():
                     print(f"****** Headers:\n{headers}")
                     chunk_number = int(headers.get('chunk_number', 0))
                     total_chunks = int(headers.get('total_chunks', 1))
-
+                    table_name = headers.get('tableName',"")
+                    MERGED_FILE_PATH = '/tmp/' + table_name + ".orc"
+                    HDFS_PATH = '/user/hive/warehouse/' + table_name + ".orc"
+                    HIVE_TABLE_NAME = table_name
                     os.makedirs(CHUNK_FOLDER, exist_ok=True)
                     chunk_path = os.path.join(CHUNK_FOLDER, f'chunk_{chunk_number}')
                     with open(chunk_path, 'wb') as f:

@@ -1,3 +1,6 @@
+import json
+import math
+import uuid
 import mysql.connector
 
 from model.schems import Column, Schema, Table
@@ -17,7 +20,7 @@ def get_mysql_schema(mysql_config):
 
     for (table_name,) in tables:
         # For each table, retrieve column details
-        cursor.execute(f"DESCRIBE {table_name}")
+        cursor.execute(f"DESCRIBE `{table_name}`")
         columns = cursor.fetchall()
 
         # Create a list of Column objects for the table
@@ -35,3 +38,57 @@ def get_mysql_schema(mysql_config):
     conn.close()
 
     return schema
+
+def send_full_schema_to_kafka(schema, producer, topic):
+    # Create a dictionary to hold all tables and their columns
+    schema_data = {
+        "schema": []
+    }
+
+    # Add tables and columns to the schema data
+    for table in schema.tables:
+        table_data = {
+            "table_name": table.name,
+            "columns": []
+        }
+
+        for column in table.columns:
+            column_data = {
+                "column_name": column.name,
+                "column_type": column.data_type
+            }
+            table_data["columns"].append(column_data)
+
+        schema_data["schema"].append(table_data)
+
+    # Serialize the entire schema to JSON
+    serialized_data = json.dumps(schema_data)
+    chunk_size=5 * 1024 * 1024
+    file_size = len(serialized_data)
+    print(file_size)
+    num_chunks = math.ceil(file_size / chunk_size)
+    schema_id = str(uuid.uuid4())
+
+    for part_number in range(1, num_chunks + 1):
+        # Extract the chunk of schema data
+        start_idx = (part_number - 1) * chunk_size
+        end_idx = part_number * chunk_size
+        schema_chunk = serialized_data[start_idx:end_idx]
+        
+        # Produce the message to Kafka
+        producer.produce(
+            "schema",
+              value=schema_chunk.encode('utf-8'),
+                key=str(part_number),
+                headers=[
+                    ('schema_id', schema_id.encode('utf-8')),
+                    ('part_number', str(part_number).encode('utf-8')),
+                    ('total_parts', str(num_chunks).encode('utf-8'))
+                ]
+            )
+        producer.flush()
+        print(f"Produced chunk {part_number} of {num_chunks}")
+
+    producer.flush()  # Ensure message is sent
+
+    print("Full schema data sent to Kafka successfully")

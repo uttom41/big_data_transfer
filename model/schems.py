@@ -1,6 +1,8 @@
 class Schema:
     def __init__(self):
         self.tables = []
+    def add_table(self, table_name):
+        self.tables.append(table_name)
 
 class Table:
     def __init__(self, name, columns):

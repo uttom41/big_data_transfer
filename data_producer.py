@@ -7,6 +7,8 @@ import pyarrow.orc as orc
 
 
 def export_mysql_to_orc(mysql_config, query, orc_file_path):
+        
+    os.makedirs(orc_file_path, exist_ok=True)
   
     # Connect to MySQL
     conn = mysql.connector.connect(**mysql_config)
@@ -20,16 +22,29 @@ def export_mysql_to_orc(mysql_config, query, orc_file_path):
     # Convert data to Pandas DataFrame
     df = pd.DataFrame(data, columns=columns)
     
+    if df.empty:
+        print("DataFrame is empty. Returning from function.")
+        return None  
+    
     # Replace NaN/NaT with None explicitly for all columns
     df = df.where(pd.notnull(df), None)  # Replaces NaN/NaT with None
     
     # Ensure the DataFrame types are compatible with pyarrow
     for col in df.columns:
-        if df[col].dtype == 'object':  # For object types (strings), convert to category if needed
-            df[col] = df[col].astype(str)
-        elif df[col].dtype == 'datetime64[ns]':  # Handle datetime columns
-            df[col] = pd.to_datetime(df[col], errors='coerce')
+        if df[col].isna().all():
+        #    print(f"Column '{col}' is entirely NULL. Replacing with a default value.")
+           df[col] = ""
+        
+        elif pd.api.types.is_numeric_dtype(df[col]):
+            df[col] = 0  # Replace with zero for numeric columns
+        elif pd.api.types.is_datetime64_any_dtype(df[col]):
+            df[col] = pd.Timestamp("1970-01-01")
     
+    # For partially null columns, fill remaining nulls
+        # df[col] = df[col].fillna(
+        #     "" if df[col].dtype == 'object' else 0 if pd.api.types.is_numeric_dtype(df[col]) else None
+        # )
+
     # Convert DataFrame to PyArrow Table
     table = pa.Table.from_pandas(df, preserve_index=False)
     
@@ -59,15 +74,15 @@ def send_file_path_to_kafka(file_path, topic,tableName,producer):
             for chunk_number in range(num_chunks):
                 chunk = file.read(chunk_size)
                 # Prepare the message with metadata
-                message = {
-                    'file_name': os.path.basename(file_path),
-                    'chunk_number': chunk_number,
-                    'total_chunks': num_chunks,
-                    'table_name': tableName,
-                    'data': chunk
-                }
+                # message = {
+                #     'file_name': os.path.basename(file_path),
+                #     'chunk_number': chunk_number,
+                #     'total_chunks': num_chunks,
+                #     'table_name': tableName,
+                #     'data': chunk
+                # }
                 # Send the message to Kafka
-                producer.produce(topic, value=chunk, key=str(chunk_number), headers=[
+                producer.produce(topic, value=chunk, key=str(chunk_number),callback=lambda err, msg: delivery_report(err, msg, file_path), headers=[
                     ('file_name', os.path.basename(file_path)),
                     ('chunk_number', str(chunk_number)),
                     ('tableName', str(tableName)),
@@ -85,9 +100,15 @@ def send_file_path_to_kafka(file_path, topic,tableName,producer):
     except Exception as e:
         print(f"Error sending file path to Kafka: {e}")
 
-def delivery_report(err, msg):
-    """Delivery report callback."""
+def delivery_report(err, msg, file_path):
     if err is not None:
         print(f"Message delivery failed: {err}")
     else:
         print(f"Message delivered to {msg.topic()} [{msg.partition()}]")
+
+        # File delete if message is delivered successfully
+        try:
+            os.remove(file_path)
+            print(f"File {file_path} deleted successfully.")
+        except OSError as e:
+            print(f"Error deleting file {file_path}: {e}")
