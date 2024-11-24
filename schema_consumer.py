@@ -29,7 +29,7 @@ def create_single_partitioned_hive_table(conn:hive.Connection, schema:Schema):
 
                 if column_name.lower() in ['order', 'select', 'from', 'where', \
                     'raw', 'unique', 'out', "application", 'user', 'column', \
-                        '_down_payment', '_voucher_number', '_edit_url']:  # Add more keywords if necessary
+                        '_down_payment', '_voucher_number', '_edit_url','floor']:  # Add more keywords if necessary
                     column_name = f"`{column_name}`"  # Escape the keyword
 
                 count = 1

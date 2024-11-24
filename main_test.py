@@ -17,7 +17,7 @@ HIVE_TABLE_NAME = ''
 def main():
     received_chunks = 0
     # Connect to Hive (not used in this simplified version)
-    conn, cursor = create_connection("prism")
+    conn, cursor = create_connection("kiam_db")
 
     # Configure Kafka consumer
     consumer_config = {
