@@ -8,7 +8,7 @@ def upload_to_hdfs(local_path, hdfs_path):
         subprocess.run(['hdfs', 'dfs', '-put', '-f', local_path, hdfs_path], check=True)
         print(f"File uploaded to HDFS: {hdfs_path}")
         try:
-            os.remove(local_path)
+            # os.remove(local_path)
             print(f"File {local_path} deleted successfully.")
         except OSError as e:
             print(f"Error deleting file {local_path}: {e}")

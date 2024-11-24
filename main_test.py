@@ -8,7 +8,7 @@ from table_data_consumer import *
 # Kafka Configuration
 KAFKA_SERVER = 'localhost:9092'
 TOPIC_NAME = 'data'
-CHUNK_FOLDER = '/tmp/orcdata/'  # Temporary folder for storing file chunks
+CHUNK_FOLDER = '/tmp/orcdata/consumer'  # Temporary folder for storing file chunks
 MERGED_FILE_PATH = ''  # Path for the merged ORC file
 HDFS_PATH = ''
 HIVE_TABLE_NAME = ''
@@ -81,7 +81,7 @@ def main():
                     chunk_number = int(headers.get('chunk_number', 0))
                     total_chunks = int(headers.get('total_chunks', 1))
                     table_name = headers.get('tableName',"")
-                    MERGED_FILE_PATH = '/tmp/' + table_name + ".orc"
+                    MERGED_FILE_PATH = '/tmp/orcdata/consumer' + table_name + ".orc"
                     HDFS_PATH = '/user/hive/warehouse/' + table_name + ".orc"
                     HIVE_TABLE_NAME = table_name
                     os.makedirs(CHUNK_FOLDER, exist_ok=True)
@@ -98,10 +98,9 @@ def main():
     
                         # Upload merged file to HDFS
                         if not check_file_exists_in_hdfs(HDFS_PATH):
-                            upload_to_hdfs(MERGED_FILE_PATH, HDFS_PATH)
-
-                        load_data_into_hive(conn=conn, hdfs_file_path= HDFS_PATH, table_name=HIVE_TABLE_NAME)
-                        received_chunks = 0
+                            if upload_to_hdfs(MERGED_FILE_PATH, HDFS_PATH):
+                                load_data_into_hive(conn=conn, hdfs_file_path= HDFS_PATH, table_name=HIVE_TABLE_NAME)
+                                received_chunks = 0
                         break
 
     except KeyboardInterrupt:

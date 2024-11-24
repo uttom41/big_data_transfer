@@ -8,7 +8,7 @@ import pyarrow.orc as orc
 
 def export_mysql_to_orc(mysql_config, query, orc_file_path):
         
-    os.makedirs(orc_file_path, exist_ok=True)
+    # os.makedirs(orc_file_path, exist_ok=True)
   
     # Connect to MySQL
     conn = mysql.connector.connect(**mysql_config)
@@ -108,7 +108,7 @@ def delivery_report(err, msg, file_path):
 
         # File delete if message is delivered successfully
         try:
-            os.remove(file_path)
+            # os.remove(file_path)
             print(f"File {file_path} deleted successfully.")
         except OSError as e:
             print(f"Error deleting file {file_path}: {e}")

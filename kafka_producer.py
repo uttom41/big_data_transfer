@@ -40,7 +40,7 @@ if __name__ == "__main__":
         query = f"SELECT * FROM {table.name}"
 
     #     # Path to save ORC file
-        orc_file_path = f"/tmp/orcdata/{table.name}.orc"
+        orc_file_path = f"/tmp/orcdata/producer/{table.name}.orc"
 
     #      # Export MySQL table to ORC
         file = export_mysql_to_orc(mysql_config, query, orc_file_path)
