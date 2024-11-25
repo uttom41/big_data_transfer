@@ -4,6 +4,8 @@ from hive_connection import create_connection
 from schema_collector import SchemaCollector
 from schema_consumer import create_single_partitioned_hive_table
 from table_data_consumer import * 
+import json
+import time
 
 # Kafka Configuration
 KAFKA_SERVER = 'localhost:9092'
@@ -16,6 +18,7 @@ HIVE_TABLE_NAME = ''
 
 def main():
     received_chunks = 0
+    c=0
     # Connect to Hive (not used in this simplified version)
     conn, cursor = create_connection("kiam_db")
 
@@ -24,7 +27,7 @@ def main():
         'bootstrap.servers': '192.168.10.250:9092',  # Kafka broker address
         'group.id': 'group-id',                 # Consumer group ID
         'auto.offset.reset': 'earliest',          # Start reading from the earliest message
-        'fetch.message.max.bytes': 5242880
+        'fetch.message.max.bytes': 10485760
     }
 
     # Create a Kafka consumer instance
@@ -73,35 +76,55 @@ def main():
                     print("Full schema received and decoded successfully.")
 
             elif msg.topic() == 'data':
+                c +=1
+                start_time = time.time()
                 print("***From data topic")
-                while True:
-                    # Extract metadata from headers
-                    headers = {key: value.decode('utf-8') for key, value in msg.headers()}
-                    print(f"****** Headers:\n{headers}")
-                    chunk_number = int(headers.get('chunk_number', 0))
-                    total_chunks = int(headers.get('total_chunks', 1))
-                    table_name = headers.get('tableName',"")
-                    MERGED_FILE_PATH = '/tmp/orcdata/consumer' + table_name + ".orc"
-                    HDFS_PATH = '/user/hive/warehouse/' + table_name + ".orc"
-                    HIVE_TABLE_NAME = table_name
-                    os.makedirs(CHUNK_FOLDER, exist_ok=True)
-                    chunk_path = os.path.join(CHUNK_FOLDER, f'chunk_{chunk_number}')
-                    with open(chunk_path, 'wb') as f:
-                        f.write(msg.value())
+                # Extract metadata from headers
+                headers = {key: value.decode('utf-8') for key, value in msg.headers()}
+                print(f"****** Headers:\n{headers}")
+                chunk_number = int(headers.get('chunk_number', 0))
+                total_chunks = int(headers.get('total_chunks', 1))
+                table_name = headers.get('tableName',"")
+                MERGED_FILE_PATH = '/tmp/orcdata/consumer' + table_name + ".orc"
+                HDFS_PATH = '/user/hive/warehouse/' + table_name + ".orc"
+                HIVE_TABLE_NAME = table_name
+                os.makedirs(CHUNK_FOLDER, exist_ok=True)
+                chunk_path = os.path.join(CHUNK_FOLDER, f'chunk_{chunk_number}')
+                with open(chunk_path, 'wb') as f:
+                    f.write(msg.value())
+                received_chunks += 1
+                print(f"Received chunk {chunk_number + 1}/{total_chunks}")
+                if received_chunks == total_chunks:
+                    print("All chunks received. Merging...")
+                    merge_chunks(CHUNK_FOLDER, MERGED_FILE_PATH, total_chunks)
 
-                    received_chunks += 1
-                    print(f"Received chunk {chunk_number + 1}/{total_chunks}")
-
-                    if received_chunks == total_chunks:
-                        print("All chunks received. Merging...")
-                        merge_chunks(CHUNK_FOLDER, MERGED_FILE_PATH, total_chunks)
-    
-                        # Upload merged file to HDFS
-                        if not check_file_exists_in_hdfs(HDFS_PATH):
-                            if upload_to_hdfs(MERGED_FILE_PATH, HDFS_PATH):
-                                load_data_into_hive(conn=conn, hdfs_file_path= HDFS_PATH, table_name=HIVE_TABLE_NAME)
-                                received_chunks = 0
-                        break
+                    # Upload merged file to HDFS
+                    if not check_file_exists_in_hdfs(HDFS_PATH):
+                        if upload_to_hdfs(MERGED_FILE_PATH, HDFS_PATH):
+                            load_data_into_hive(conn=conn, hdfs_file_path= HDFS_PATH, table_name=HIVE_TABLE_NAME)
+                            received_chunks = 0
+                    else:
+                        print("Failed to upload to HDFS")
+                        
+                end_time = time.time()
+                execution = end_time - start_time
+                
+                try:
+                    with open('./model/execitopm_time', 'r') as file:
+                        data = json.load(file)
+                except FileNotFoundError:
+                    data = {}
+                
+                data[table_name] = execution
+                with open('./model/execitopm_time', 'w') as file:
+                    json.dump(data, file, indent=4)
+                
+                print(f"********************** Consumer table count {c}")
+                
+                # # Clean up chunk files after processing
+                # for chunk in os.listdir(CHUNK_FOLDER):
+                #     os.remove(os.path.join(CHUNK_FOLDER, chunk))
+                # print("Cleaned up chunk files."
 
     except KeyboardInterrupt:
         print("Interrupted by user")

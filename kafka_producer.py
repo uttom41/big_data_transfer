@@ -11,7 +11,7 @@ TOPIC_NAME = 'data'  # Replace with your topic name
 producer_conf = {
     'bootstrap.servers': KAFKA_SERVER,
     'client.id': 'python-producer',  # Optional: Identify producer
-    'message.max.bytes': 5242880
+    'message.max.bytes': 10485760
 }
 
 
@@ -23,7 +23,7 @@ if __name__ == "__main__":
         "host": "192.168.10.250",
         "user": "root",
         "password": "12345678",
-        "database": "prism_db",
+        "database": "kiam_db",
         "port": 3306,
     }
 
@@ -32,13 +32,13 @@ if __name__ == "__main__":
 
     c=0
     for table in schema.tables:
-        if c==7:
-            break
+        # if c==7:
+        #     break
 
         print(f'************data send start {table.name}')
     #     # MySQL Query
-        query = f"SELECT * FROM {table.name}"
-
+        query = f"SELECT * FROM `{table.name}`"
+        print(query)
     #     # Path to save ORC file
         orc_file_path = f"/tmp/orcdata/producer/{table.name}.orc"
 
@@ -50,6 +50,8 @@ if __name__ == "__main__":
             send_file_path_to_kafka(file, TOPIC_NAME,table.name,producer)
             print(f'****************data send End {table.name}')
         c+=1
+        print(f"********************** producer table count {c}")
+        
     # Path to save ORC file
     # orc_file_path = f"/tmp/voucher_products.orc"
     # message_key = "example-key"

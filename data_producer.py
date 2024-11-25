@@ -5,6 +5,15 @@ import pyarrow as pa
 import pyarrow.orc as orc
 
 
+def convert_unsupported_types(df):
+    # Iterate through all columns to find unsupported types
+    for column in df.columns:
+        if pd.api.types.is_timedelta64_dtype(df[column]):  
+            print(f"Converting column '{column}' with timedelta[ns] to int64 (milliseconds).")
+            df[column] = df[column].dt.total_seconds() * 1000  
+
+    return df
+
 
 def export_mysql_to_orc(mysql_config, query, orc_file_path):
         
@@ -25,6 +34,8 @@ def export_mysql_to_orc(mysql_config, query, orc_file_path):
     if df.empty:
         print("DataFrame is empty. Returning from function.")
         return None  
+    
+    df = convert_unsupported_types(df)
     
     # Replace NaN/NaT with None explicitly for all columns
     df = df.where(pd.notnull(df), None)  # Replaces NaN/NaT with None

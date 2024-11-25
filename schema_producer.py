@@ -15,7 +15,11 @@ def get_mysql_schema(mysql_config):
     schema = Schema()
 
     # Retrieve all tables from the database
-    cursor.execute("SHOW TABLES")
+    cursor.execute("""
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = %s AND table_type = 'BASE TABLE'
+        """, (mysql_config['database'],))
     tables = cursor.fetchall()
 
     for (table_name,) in tables:

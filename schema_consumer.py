@@ -63,6 +63,7 @@ def create_single_partitioned_hive_table(conn:hive.Connection, schema:Schema):
             
             print(f"*********Table created successfully.{table['name']}")
             
+            
         print("Table created successfully.")
     
     except Exception as e:

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Process Usage Monitor</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Process Usage Monitor</h1>
+    <div id="usage">
+        <p>CPU Usage: <span id="cpu">Loading...</span>%</p>
+        <p>Memory Usage: <span id="memory">Loading...</span> MB</p>
+        <p id="error" style="color:red; display:none;">Process not found or not running</p>
+    </div>
+
+    <script>
+        function updateUsage() {
+            $.get('/get_usage', function(data) {
+                if (data.error) {
+                    $('#usage').hide();
+                    $('#error').show();
+                } else {
+                    $('#error').hide();
+                    $('#usage').show();
+                    $('#cpu').text(data.cpu.toFixed(2));
+                    $('#memory').text(data.memory.toFixed(2));
+                }
+            });
+        }
+
+        // Update every 1 second
+        setInterval(updateUsage, 1000);
+
+        // Initial call to display data immediately
+        updateUsage();
+    </script>
+</body>
+</html>

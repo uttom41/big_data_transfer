@@ -28,7 +28,6 @@ def load_data_into_hive(conn, hdfs_file_path, table_name):
         print(f"Error loading data into Hive: {e}")
     finally:
         cursor.close()
-        conn.close()
 
 def merge_chunks(chunk_folder, merged_file_path, total_chunks):
     with open(merged_file_path, 'wb') as merged_file:
