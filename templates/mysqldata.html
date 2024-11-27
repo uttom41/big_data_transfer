@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mysql Table Viewer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        form {
+            margin-bottom: 20px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+        }
+        table th, table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        table th {
+            background-color: #f2f2f2;
+        }
+        .table-container {
+            max-height: 500px;
+            overflow-y: scroll;
+            border: 1px solid #ddd;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Mysql Table Viewer</h1>
+    <form method="POST">
+        <label for="table_name">Enter Table Name:</label>
+        <input type="text" id="table_name" name="table_name" required>
+        <button type="submit">Submit</button>
+    </form>
+    {% if error %}
+        <div class="error">{{ error }}</div>
+    {% endif %}
+    {% if data %}
+        <h2>Table: {{ table_name }}</h2>
+       <h2>Execution Time: {{ '%.2f' | format(execution) }} seconds</h2>
+       <h2>Total Row count: {{row_count}}</h2>
+       
+    {% endif %}
+</body>
+</html>

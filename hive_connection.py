@@ -16,9 +16,9 @@ def create_connection(database_name:str):
         # transport = TFramedTransport(socket)
         # protocol = TBinaryProtocol(transport)
         conn = hive.Connection(
-            host='192.168.10.250', 
+            host='localhost', 
             port=10000, 
-            username='root', 
+            username='uttom41', 
             auth='NONE'
         )
         cursor = conn.cursor()

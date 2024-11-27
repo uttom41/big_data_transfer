@@ -5,6 +5,9 @@ import pyarrow as pa
 import pyarrow.orc as orc
 
 
+output_dir = 'output/'
+os.makedirs(output_dir, exist_ok=True)
+
 def convert_unsupported_types(df):
     # Iterate through all columns to find unsupported types
     for column in df.columns:
@@ -27,6 +30,7 @@ def export_mysql_to_orc(mysql_config, query, orc_file_path):
     cursor.execute(query)
     columns = [desc[0] for desc in cursor.description]  # Column names
     data = cursor.fetchall()
+    print(data)
     
     # Convert data to Pandas DataFrame
     df = pd.DataFrame(data, columns=columns)
