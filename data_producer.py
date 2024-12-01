@@ -7,6 +7,7 @@ from decimal import Decimal
 import numpy as np
 
 
+
 output_dir = 'output/'
 os.makedirs(output_dir, exist_ok=True)
 
@@ -72,7 +73,7 @@ def export_mysql_to_orc(mysql_config, query, orc_file_path):
                     df[col] = df[col].fillna(0.0).astype(float)
             elif pd.api.types.is_datetime64_any_dtype(df[col]): 
                 df[col] = pd.NaT 
-                df[col] = df[col].astype('datetime64[ns]')
+                # df[col] = df[col].astype('datetime64[ns]')
             else:
                 df[col] = np.nan
                  
@@ -108,10 +109,13 @@ def export_mysql_to_orc(mysql_config, query, orc_file_path):
 
     # Convert DataFrame to PyArrow Table
     table = pa.Table.from_pandas(df, preserve_index=False)
+    append_to_orc(orc_file_path, table)
+
+
+    # # Write the Table to ORC file
+    # with open(orc_file_path, 'wb') as f:
+    #     orc.write_table(table, f)
     
-    # Write the Table to ORC file
-    with open(orc_file_path, 'wb') as f:
-        orc.write_table(table, f)
     
     print(f"Data exported to ORC file: {orc_file_path}")
     
@@ -173,3 +177,49 @@ def delivery_report(err, msg, file_path):
             print(f"File {file_path} deleted successfully.")
         except OSError as e:
             print(f"Error deleting file {file_path}: {e}")
+
+def append_to_orc(orc_file_path, new_table):
+    # Check if the DataFrame (new_table) is empty
+    if new_table.num_rows == 0:
+        return  # Early return if the DataFrame is empty
+
+    # Check if the ORC file exists
+    if os.path.exists(orc_file_path):
+        # Read the existing ORC file
+        with open(orc_file_path, 'rb') as f:
+            existing_table = orc.read_table(f)
+
+        # Ensure the schemas match by casting the new table columns
+        for column in existing_table.schema.names:
+            if column in new_table.schema.names:
+                existing_type = existing_table.schema.field(column).type
+                new_type = new_table.schema.field(column).type
+
+                # If the types don't match, cast the new_table column to the existing type
+                if existing_type != new_type:
+                    print(f"Casting column '{column}' from {new_type} to {existing_type}")
+
+                    if existing_type == pa.date32():  # Ensure correct type for date32
+                        if new_type == pa.float64:  # If new_type is double (float64)
+                            new_table = new_table.set_column(
+                                new_table.schema.get_field_index(column),
+                                column,
+                                new_table[column].cast(pa.timestamp('ms')).cast(pa.date32())
+                            )
+                    else:
+                        new_table = new_table.set_column(
+                            new_table.schema.get_field_index(column),
+                            column,
+                            new_table[column].cast(existing_type)
+                        )
+
+        # Concatenate the existing data with the new table
+        combined_table = pa.concat_tables([existing_table, new_table])
+
+    else:
+        # If the file doesn't exist, use the new table as is
+        combined_table = new_table
+
+    # Write the combined data (existing + new) to the ORC file
+    with open(orc_file_path, 'wb') as f:
+        orc.write_table(combined_table, f)

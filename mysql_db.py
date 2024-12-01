@@ -8,6 +8,7 @@ from schema_producer import get_mysql_schema
 from hive_connection import create_connection
 from schema_consumer import create_single_partitioned_hive_table
 from data_producer import export_mysql_to_orc
+import mysql.connector
 
 # # Paths
 # sql_file_path = '../prismdb.sql'  # Your MySQL dump file
@@ -256,12 +257,54 @@ def main():
         "database": "prism",
         "port": 3306,
     }
-    conn, cursor = create_connection("prism")
-    schema:Schema = get_mysql_schema(mysql_config)
-    create_single_partitioned_hive_table(conn,schema)
-    
-    # query = f"SELECT * FROM attendance ORDER BY id ASC LIMIT 400000 OFFSET 1210100"
+    # conn, cursor = create_connection("prism")
+    # schema:Schema = get_mysql_schema(mysql_config)
+    # create_single_partitioned_hive_table(conn,schema)
+
+
+    conn = mysql.connector.connect(**mysql_config)
+    cursor = conn.cursor()
+    start_value=100000
+    offset_value=0
+    row_count_value=0
+
+    # query = f"SELECT * FROM cheque_book_leafs ORDER BY id ASC LIMIT 400000 OFFSET 1210100"
+    #     # query = f"SELECT * FROM {table_name} ORDER BY id ASC LIMIT {start_value} OFFSET {offset_value}"
     # export_mysql_to_orc(mysql_config,query=query,orc_file_path="output/attendance.orc")
+    # offset_value+=start_value
+
+
+    cursor.execute("""
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = %s AND table_type = 'BASE TABLE'
+        """, (mysql_config['database'],))
+    tables = cursor.fetchall()
+
+    for (table_name,) in tables:
+        if table_name == 'authorization':
+            table_name = f"`{table_name}`"
+        elif table_name== 'attendance_status':
+            continue
+
+        row_count_query = f"SELECT COUNT(*) FROM {table_name}"
+        cursor.execute(row_count_query)
+        row_count = cursor.fetchall()
+
+        row_count_value = row_count[0][0]
+
+        if row_count_value ==0:
+            continue
+
+        print(f"Table name {table_name}")
+        # query = f"SELECT * FROM attendance ORDER BY id ASC LIMIT 400000 OFFSET 1210100"
+        offset_value=0
+        while row_count_value > offset_value:
+            query = f"SELECT * FROM {table_name} ORDER BY id ASC LIMIT {start_value} OFFSET {offset_value}"
+            export_mysql_to_orc(mysql_config,query=query,orc_file_path=f"output/{table_name}.orc")
+            offset_value+=(start_value+1)
+            
+            
 
 if __name__ == "__main__":
     main()
