@@ -35,6 +35,9 @@ def get_mysql_schema(mysql_config):
             column_objects.append(Column(column_name, column_type))
 
         # Create Table object and add it to Schema
+        if table_name == 'authorization':
+            table_name = f"`{table_name}`"
+
         table = Table(table_name, column_objects)
         schema.add_table(table)
 

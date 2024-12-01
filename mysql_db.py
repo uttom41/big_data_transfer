@@ -250,18 +250,18 @@ from data_producer import export_mysql_to_orc
 
 def main():
     mysql_config = {
-        "host": "192.168.10.105",
-        "user": "remote",
-        "password": "123456",
-        "database": "kiam_db",
+        "host": "192.168.10.58",
+        "user": "root",
+        "password": "12345678",
+        "database": "prism",
         "port": 3306,
     }
-    # conn, cursor = create_connection("kiam_db_part")
-    # schema:Schema = get_mysql_schema(mysql_config)
-    # create_single_partitioned_hive_table(conn,schema)
+    conn, cursor = create_connection("prism")
+    schema:Schema = get_mysql_schema(mysql_config)
+    create_single_partitioned_hive_table(conn,schema)
     
-    query = f"SELECT * FROM attendance ORDER BY id ASC LIMIT 400000 OFFSET 1210100"
-    export_mysql_to_orc(mysql_config,query=query,orc_file_path="output/attendance.orc")
+    # query = f"SELECT * FROM attendance ORDER BY id ASC LIMIT 400000 OFFSET 1210100"
+    # export_mysql_to_orc(mysql_config,query=query,orc_file_path="output/attendance.orc")
 
 if __name__ == "__main__":
     main()
