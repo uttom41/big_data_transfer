@@ -256,12 +256,12 @@ def main():
         "database": "kiam_db",
         "port": 3306,
     }
-    # conn, cursor = create_connection("kiam_db")
+    # conn, cursor = create_connection("kiam_db_part")
     # schema:Schema = get_mysql_schema(mysql_config)
     # create_single_partitioned_hive_table(conn,schema)
     
-    query = f"SELECT * FROM accounts"
-    export_mysql_to_orc(mysql_config,query=query,orc_file_path="output/accounts.orc")
+    query = f"SELECT * FROM attendance ORDER BY id ASC LIMIT 400000 OFFSET 1210100"
+    export_mysql_to_orc(mysql_config,query=query,orc_file_path="output/attendance.orc")
 
 if __name__ == "__main__":
     main()

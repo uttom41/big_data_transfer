@@ -35,12 +35,12 @@ def index():
             .enableHiveSupport() \
             .getOrCreate()
 
-            database_name = "kiam_db"
+            database_name = "kiam_db_part"
 
             # SQL কোয়েরি তৈরি করুন
            
             # query = f" SELECT * FROM {database_name}.{table_name} WHERE CAST(REGEXP_EXTRACT(working_hour, '^([0-9]+)', 1) AS INT) < 8"
-            query = f"SELECT * FROM {database_name}.{table_name} LIMIT 427598"
+            query = f"SELECT entry_date,present_hour,employee_id FROM {database_name}.{table_name} LIMIT 1500000"
 
             # Spark DataFrame-এ কোয়েরি চালান
             df_spark = spark.sql(query)
@@ -103,7 +103,7 @@ def mysqldata():
             
             conn = mysql.connector.connect(**mysql_config)
             cursor = conn.cursor()
-            query = f"SELECT * FROM {table_name} limit 100000"  # Limit for testing; adjust as needed
+            query = f"SELECT entry_date,present_hour,employee_id FROM {table_name} limit 1500000"  # Limit for testing; adjust as needed
             cursor.execute(query)
 
              # Fetch column headers

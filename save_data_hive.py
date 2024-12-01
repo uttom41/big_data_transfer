@@ -4,11 +4,55 @@ import os
 import pyorc
 from hive_connection import create_connection
 from hdfs import InsecureClient
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import input_file_name, lit
+import re
 
 hive_sql_file = 'hive_tables.sql'
 output_dir = 'output'
 hdfs_base_path = '/user/hive/warehouse/'  # HDFS path for Hive tables
-database_name = 'kaim_db/'
+database_name = 'kiam_db_part.db/'
+
+def data_upload_hive_using_spark(local_path,orc_file_path, hive_table_name):
+  
+    # Initialize SparkSession
+    spark = SparkSession.builder \
+        .appName("Dynamic Partition Detection") \
+        .config("spark.sql.catalogImplementation", "hive") \
+        .enableHiveSupport() \
+        .getOrCreate()
+    
+    local_path = os.path.abspath(local_path)
+     # Check if the local file exists
+    if not os.path.exists(local_path):
+        raise FileNotFoundError(f"The file {local_path} does not exist.")
+
+    describe_result = spark.sql(f"DESCRIBE FORMATTED kiam_db_part.{hive_table_name}").collect()
+
+    partition_columns = []
+    start_partition = False
+
+    for row in describe_result:
+        col_name, data_type, comment = row.col_name.strip(), row.data_type.strip(), row.comment
+        if col_name == "# Partition Information":
+            start_partition = True
+            continue
+        if start_partition:
+            if col_name == "# Detailed Table Information":
+                break
+            if col_name and not col_name.startswith("#") and data_type != "NULL":
+                partition_columns.append(col_name)
+    
+    df = spark.read.format("orc").load(f"file:///{local_path}") 
+    df.write.format("orc").mode("append").save(orc_file_path)  
+    df.write.format("hive") \
+            .mode("append") \
+            .partitionBy(*partition_columns) \
+            .option("path", orc_file_path) \
+            .saveAsTable(f"kiam_db_part.{hive_table_name}")
+
+
+    spark.stop()
 
 def table_create(conn):
     print("Creating tables...")
@@ -44,13 +88,13 @@ def upload_to_hdfs_with_metadata(hdfs_client, local_path, hdfs_path, table_name,
             hdfs_client.makedirs(hdfs_path)
         else:
             print(f"Directory {hdfs_path} already exists in HDFS.")
-            return True
+            # return True
 
         # ফাইল HDFS-এ আপলোড করুন
         d = hdfs_client.upload(hdfs_path, local_path)
 
         if d:
-            print(f"File successfully uploaded to HDFS path: {hdfs_path}")
+            print(f"File successfully uploaded to HDFS path: {d}")
         else:
             print(f"File upload failed for path: {hdfs_path}")
             return False
@@ -119,65 +163,68 @@ def validate_orc_file(file_path):
 
 def main():
     start_time = time.time()
-    conn, cursor = create_connection("kiam_db")
+    # conn, cursor = create_connection("kiam_db_part")
 
     # table_create(conn)
    
-    hdfs_client = InsecureClient('http://localhost:9870', user='uttom41')  # adjust as needed
+    # hdfs_client = InsecureClient('http://localhost:9870', user='uttom41')  # adjust as needed
 
-    try:
-        files = hdfs_client.list('/')
-        print("HDFS connection successful. Files and directories in root:")
-        print(files)
-    except Exception as e:
-        print("HDFS connection failed.")
-        print("Error:", e)
+    # try:
+    #     files = hdfs_client.list('/')
+    #     print("HDFS connection successful. Files and directories in root:")
+    #     print(files)
+    # except Exception as e:
+    #     print("HDFS connection failed.")
+    #     print("Error:", e)
 
     metastore_file = './model/execitopm_time'
 
     
-    # validate_orc_file('output/all_payscale_data.orc') 
+    # validate_orc_file('output/attendance.orc') 
 
     for csv_file in os.listdir(output_dir):
         if csv_file.endswith('.orc'):
             table_name = os.path.splitext(csv_file)[0]
-            table_name1= table_name
-            # table_name = f"`{table_name}`"
             local_path = os.path.join(output_dir, csv_file)
-            hdfs_path = os.path.join(hdfs_base_path, database_name, table_name,"/2")
-            # Function call
-            success = upload_to_hdfs_with_metadata(hdfs_client, local_path, hdfs_path, table_name, metastore_file)
+            if not os.path.exists(local_path):
+                print(f"File not found: {local_path}")
+                continue
+            hdfs_path = os.path.join(hdfs_base_path, database_name, table_name)
 
-            if success:
-                try:
-                    # load_data_command = f"""
-                    # LOAD DATA INPATH '{hdfs_path}/{csv_file}' OVERWRITE INTO TABLE {table_name1}
-                    # FIELDS TERMINATED BY ',' 
-                    # LINES TERMINATED BY '\\n'
-                    # """
-                    load_data_command = f"""
-                        LOAD DATA INPATH '{hdfs_path}/{csv_file}' INTO TABLE {table_name}
-                        """
-                    cursor.execute(load_data_command)
-                    print(f"Loaded data into table {table_name1}")
+            # Ensure the HDFS directory exists
+            os.system(f"hdfs dfs -mkdir -p {hdfs_path}")
 
-                    # # Optionally set properties like compression
-                    # alter_table_command = f"ALTER TABLE {table_name} SET TBLPROPERTIES ('orc.compress'='SNAPPY');"
-                    # cursor.execute(alter_table_command)
-                    # print(f"Set ORC compression for table {table_name}")
-                     # লোকাল ফাইল মুছুন (যদি আপলোড সফল হয়)
-                    # if os.path.exists(local_path):
-                    #     os.remove(local_path)
-                    #     print(f"File {local_path} deleted successfully.")
-                    # delete_table_metadata(metadata_file=metastore_file,table_name=table_name)
+            # # Function call
+            # success = upload_to_hdfs_with_metadata(hdfs_client, local_path, hdfs_path, table_name, metastore_file)
+            # if success:
+            data_upload_hive_using_spark(local_path=local_path,orc_file_path=hdfs_path,hive_table_name=table_name)
+
+            # if success:
+            #     try:
+            #         load_data_command = f"""
+            #             LOAD DATA INPATH '{hdfs_path}/{csv_file}' INTO TABLE {table_name}
+            #             PARTITION (entry_date='{partition_value}')
+            #             """
+            #         cursor.execute(load_data_command)
+            #         print(f"Loaded data into table {table_name1}")
+
+            #         # # Optionally set properties like compression
+            #         # alter_table_command = f"ALTER TABLE {table_name} SET TBLPROPERTIES ('orc.compress'='SNAPPY');"
+            #         # cursor.execute(alter_table_command)
+            #         # print(f"Set ORC compression for table {table_name}")
+            #          # লোকাল ফাইল মুছুন (যদি আপলোড সফল হয়)
+            #         # if os.path.exists(local_path):
+            #         #     os.remove(local_path)
+            #         #     print(f"File {local_path} deleted successfully.")
+            #         # delete_table_metadata(metadata_file=metastore_file,table_name=table_name)
                     
-                except Exception as e:
-                    print(f"Error loading data for table {table_name}: {e}")
-            else:
-                print("File upload failed.")
+            #     except Exception as e:
+            #         print(f"Error loading data for table {table_name}: {e}")
+            # else:
+            #     print("File upload failed.")
 
-    cursor.close()
-    conn.close()
+    # cursor.close()
+    # conn.close()
     end_time = time.time()
     execution = end_time - start_time
     print(f"Tables created total Time.{execution}")

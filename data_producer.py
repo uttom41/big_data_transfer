@@ -3,6 +3,8 @@ import mysql.connector
 import pandas as pd
 import pyarrow as pa
 import pyarrow.orc as orc
+from decimal import Decimal 
+import numpy as np
 
 
 output_dir = 'output/'
@@ -22,17 +24,13 @@ def export_mysql_to_orc(mysql_config, query, orc_file_path):
         
     # os.makedirs(orc_file_path, exist_ok=True)
   
-    # Connect to MySQL
     conn = mysql.connector.connect(**mysql_config)
     cursor = conn.cursor()
     
-    # Execute the query and fetch data
     cursor.execute(query)
     columns = [desc[0] for desc in cursor.description]  # Column names
     data = cursor.fetchall()
-    print(data)
-    
-    # Convert data to Pandas DataFrame
+   
     df = pd.DataFrame(data, columns=columns)
     
     if df.empty:
@@ -41,24 +39,72 @@ def export_mysql_to_orc(mysql_config, query, orc_file_path):
     
     df = convert_unsupported_types(df)
     
-    # Replace NaN/NaT with None explicitly for all columns
     df = df.where(pd.notnull(df), None)  # Replaces NaN/NaT with None
     
-    # Ensure the DataFrame types are compatible with pyarrow
+    # for col in df.columns:
+    #     if df[col].isna().all():
+    #         if pd.api.types.is_numeric_dtype(df[col]):
+    #             df[col] = 0
+    #         elif pd.api.types.is_datetime64_any_dtype(df[col]):
+    #             df[col] = pd.Timestamp("1870-01-01") 
+    #         else:
+    #             df[col] = ""
+    #     else:
+    #         if pd.api.types.is_numeric_dtype(df[col]):
+    #             df[col] = df[col].fillna(0).astype(float) 
+    #         elif pd.api.types.is_datetime64_any_dtype(df[col]):
+    #             df[col] = pd.to_datetime(df[col], errors='coerce').fillna(pd.Timestamp("1870-01-01"))
+    #         elif pd.api.types.is_categorical_dtype(df[col]):
+    #             df[col] = df[col].cat.add_categories([""]).fillna("")
+    #         elif df[col].apply(lambda x: isinstance(x, Decimal)).any(): 
+    #             print(f"Converting column '{col}' from Decimal to float.")
+    #             # Replace NaN with 0 before converting to float
+    #             df[col] = df[col].fillna(0).apply(lambda x: float(x) if isinstance(x, Decimal) else x)
+    #         else:
+    #             df[col] = df[col].fillna("")
+
     for col in df.columns:
         if df[col].isna().all():
-        #    print(f"Column '{col}' is entirely NULL. Replacing with a default value.")
-           df[col] = ""
-        
-        elif pd.api.types.is_numeric_dtype(df[col]):
-            df[col] = 0  # Replace with zero for numeric columns
+            if pd.api.types.is_numeric_dtype(df[col]):
+                if pd.api.types.is_integer_dtype(df[col]):
+                    df[col] = df[col].fillna(0).astype(np.int64)  # Ensure integer columns remain int
+                else:
+                    df[col] = df[col].fillna(0.0).astype(float)
+            elif pd.api.types.is_datetime64_any_dtype(df[col]): 
+                df[col] = pd.NaT 
+                df[col] = df[col].astype('datetime64[ns]')
+            else:
+                df[col] = np.nan
+                 
+        else:
+            if pd.api.types.is_numeric_dtype(df[col]): 
+                if pd.api.types.is_integer_dtype(df[col]):
+                    df[col] = df[col].fillna(0).astype(np.int64) 
+                else:
+                    df[col] = df[col].fillna(0.0).astype(float)
+            elif pd.api.types.is_datetime64_any_dtype(df[col]):
+                df[col] = pd.to_datetime(
+                    df[col], errors="coerce"
+                ).fillna(pd.NaT)
+            elif pd.api.types.is_categorical_dtype(df[col]):
+                df[col] = df[col].cat.add_categories([""]).fillna("")
+            elif df[col].apply(lambda x: isinstance(x, Decimal)).any():
+                print(f"Converting column '{col}' from Decimal to float.")
+                df[col] = df[col].apply(lambda x: float(x) if isinstance(x, Decimal) else x).fillna(0.0)
+            else:
+                df[col] = df[col].fillna(np.nan)
+
+    # Final type conversion to ensure all columns are compatible with Hive
+    for col in df.columns:
+        if pd.api.types.is_integer_dtype(df[col]):
+            df[col] = df[col].astype(np.int64)  # Ensure integer columns are int64
+        elif pd.api.types.is_float_dtype(df[col]):
+            df[col] = df[col].astype(float)  # Ensure float columns are proper float type
         elif pd.api.types.is_datetime64_any_dtype(df[col]):
-            df[col] = pd.Timestamp("1970-01-01")
-    
-    # For partially null columns, fill remaining nulls
-        # df[col] = df[col].fillna(
-        #     "" if df[col].dtype == 'object' else 0 if pd.api.types.is_numeric_dtype(df[col]) else None
-        # )
+            df[col] = pd.to_datetime(df[col], errors="coerce").fillna(pd.NaT)
+        elif pd.api.types.is_string_dtype(df[col]):
+            df[col] = df[col].astype(str)
+           
 
     # Convert DataFrame to PyArrow Table
     table = pa.Table.from_pandas(df, preserve_index=False)
