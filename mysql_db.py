@@ -7,7 +7,7 @@ from model.schems import Schema
 from schema_producer import get_mysql_schema
 from hive_connection import create_connection
 from schema_consumer import create_single_partitioned_hive_table
-from data_producer import export_mysql_to_orc
+from data_producer import export_mysql_to_orc,export_mysql_to_orc_spark
 import mysql.connector
 
 # # Paths
@@ -264,7 +264,7 @@ def main():
 
     conn = mysql.connector.connect(**mysql_config)
     cursor = conn.cursor()
-    start_value=100000
+    start_value=3
     offset_value=0
     row_count_value=0
 
@@ -274,35 +274,45 @@ def main():
     # offset_value+=start_value
 
 
-    cursor.execute("""
-        SELECT table_name 
-        FROM information_schema.tables 
-        WHERE table_schema = %s AND table_type = 'BASE TABLE'
-        """, (mysql_config['database'],))
-    tables = cursor.fetchall()
+    # cursor.execute("""
+    #     SELECT table_name 
+    #     FROM information_schema.tables 
+    #     WHERE table_schema = %s AND table_type = 'BASE TABLE'
+    #     """, (mysql_config['database'],))
+    # tables = cursor.fetchall()
+    # skip_tables = {'attendance_status', 'currencies', 'django_celery_beat_periodictasks','django_session'}
+    # 'inventory_journals', 'products', 'vouchers', 'items', 'inventories', 'parties'
 
-    for (table_name,) in tables:
+    tables = ['ledgers']
+
+    for table_name in tables:
         if table_name == 'authorization':
             table_name = f"`{table_name}`"
-        elif table_name== 'attendance_status':
-            continue
-
-        row_count_query = f"SELECT COUNT(*) FROM {table_name}"
-        cursor.execute(row_count_query)
-        row_count = cursor.fetchall()
-
-        row_count_value = row_count[0][0]
-
-        if row_count_value ==0:
-            continue
-
+        # if table_name in skip_tables:
+        #     continue
+    
         print(f"Table name {table_name}")
-        # query = f"SELECT * FROM attendance ORDER BY id ASC LIMIT 400000 OFFSET 1210100"
-        offset_value=0
-        while row_count_value > offset_value:
-            query = f"SELECT * FROM {table_name} ORDER BY id ASC LIMIT {start_value} OFFSET {offset_value}"
-            export_mysql_to_orc(mysql_config,query=query,orc_file_path=f"output/{table_name}.orc")
-            offset_value+=(start_value+1)
+
+        # query = f"SELECT * FROM {table_name} ORDER BY id ASC LIMIT {start_value} OFFSET {offset_value}"
+        # export_mysql_to_orc(mysql_config,query=query,orc_file_path=f"output/{table_name}.orc")
+        export_mysql_to_orc_spark(orc_file_path=f"{table_name}",table_name=table_name)
+
+        # row_count_query = f"SELECT COUNT(*) FROM {table_name}"
+        # cursor.execute(row_count_query)
+        # row_count = cursor.fetchall()
+
+        # row_count_value = row_count[0][0]
+
+        # if row_count_value ==0:
+        #     continue
+
+        # print(f"Table name {table_name}")
+        # # query = f"SELECT * FROM attendance ORDER BY id ASC LIMIT 400000 OFFSET 1210100"
+        # offset_value=0
+        # while row_count_value > offset_value:
+        #     query = f"SELECT * FROM {table_name} ORDER BY id ASC LIMIT {start_value} OFFSET {offset_value}"
+        #     export_mysql_to_orc(mysql_config,query=query,orc_file_path=f"output/{table_name}.orc")
+        #     offset_value+=(start_value+1)
             
             
 

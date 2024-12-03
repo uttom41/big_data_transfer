@@ -1,6 +1,3 @@
-# Python bytecode files
-__pycache__/
-*.pyc
 
 # Virtual environment
 venv/
@@ -13,3 +10,9 @@ env/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Python bytecode files
+__pycache__/
+__pycache__/data_producer.cpython-312.pyc
+*.pyc
+

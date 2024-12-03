@@ -6,12 +6,12 @@ from hive_connection import create_connection
 from hdfs import InsecureClient
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import input_file_name, lit
-import re
+from pyspark.sql.functions import from_unixtime, col
 
 hive_sql_file = 'hive_tables.sql'
 output_dir = 'output'
 hdfs_base_path = '/user/hive/warehouse/'  # HDFS path for Hive tables
-database_name = 'kiam_db_part.db/'
+database_name = 'prism.db/'
 
 def data_upload_hive_using_spark(local_path,orc_file_path, hive_table_name):
   
@@ -27,11 +27,11 @@ def data_upload_hive_using_spark(local_path,orc_file_path, hive_table_name):
     if not os.path.exists(local_path):
         raise FileNotFoundError(f"The file {local_path} does not exist.")
 
-    describe_result = spark.sql(f"DESCRIBE FORMATTED kiam_db_part.{hive_table_name}").collect()
+    describe_result = spark.sql(f"DESCRIBE FORMATTED prism.{hive_table_name}").collect()
 
     partition_columns = []
     start_partition = False
-
+    print(f"Tables name{hive_table_name}")
     for row in describe_result:
         col_name, data_type, comment = row.col_name.strip(), row.data_type.strip(), row.comment
         if col_name == "# Partition Information":
@@ -44,12 +44,14 @@ def data_upload_hive_using_spark(local_path,orc_file_path, hive_table_name):
                 partition_columns.append(col_name)
     
     df = spark.read.format("orc").load(f"file:///{local_path}") 
+
+
     df.write.format("orc").mode("append").save(orc_file_path)  
     df.write.format("hive") \
             .mode("append") \
             .partitionBy(*partition_columns) \
             .option("path", orc_file_path) \
-            .saveAsTable(f"kiam_db_part.{hive_table_name}")
+            .saveAsTable(f"prism.{hive_table_name}")
 
 
     spark.stop()
