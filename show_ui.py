@@ -35,12 +35,13 @@ def index():
             .enableHiveSupport() \
             .getOrCreate()
 
-            database_name = "kiam_db_part"
+            database_name = "prism"
 
             # SQL কোয়েরি তৈরি করুন
            
             # query = f" SELECT * FROM {database_name}.{table_name} WHERE CAST(REGEXP_EXTRACT(working_hour, '^([0-9]+)', 1) AS INT) < 8"
-            query = f"SELECT entry_date,present_hour,employee_id FROM {database_name}.{table_name} LIMIT 1500000"
+            # query = f"SELECT entry_date,present_hour,employee_id FROM {database_name}.{table_name} LIMIT 1500000"
+            query = f"SELECT ledgers.id, ledgers.voucher_id, ledgers.entry_date, ledgers.party_id, sum(CASE WHEN (ledgers.entry_date < '2016-11-17') THEN ledgers.amount ELSE 0 END) AS opening_balance, sum(CASE WHEN (ledgers.entry_date < '2025-11-24') THEN ledgers.amount ELSE 0 END) AS closing_balance, sum(CASE WHEN (ledgers.entry_date >= '2016-11-17' AND ledgers.entry_date <= '2025-11-24' AND ledgers.amount > 0) THEN ledgers.amount ELSE 0 END) AS transaction_balance_debit, sum(CASE WHEN (ledgers.entry_date >= '2016-11-17' AND ledgers.entry_date <= '2025-11-24' AND ledgers.amount < 0) THEN ledgers.amount ELSE 0 END) AS transaction_balance_credit FROM prism.ledgers WHERE ledgers.inactive = 0 AND ledgers.deleted = 0 AND ledgers.party_id IS NOT NULL AND ledgers.entry_date <= '2025-11-24' group by ledgers.id, ledgers.voucher_id, ledgers.entry_date, ledgers.party_id limit 100;"
 
             # Spark DataFrame-এ কোয়েরি চালান
             df_spark = spark.sql(query)
@@ -83,10 +84,10 @@ def mysqldata():
     row_count=0
 
     mysql_config = {
-        "host": "192.168.10.105",
-        "user": "remote",
-        "password": "123456",
-        "database": "kiam_db",
+        "host": "192.168.10.58",
+        "user": "root",
+        "password": "12345678",
+        "database": "prism",
         "port": 3306,
     }
 
@@ -103,7 +104,8 @@ def mysqldata():
             
             conn = mysql.connector.connect(**mysql_config)
             cursor = conn.cursor()
-            query = f"SELECT entry_date,present_hour,employee_id FROM {table_name} limit 1500000"  # Limit for testing; adjust as needed
+            # query = f"SELECT entry_date,present_hour,employee_id FROM {table_name} limit 1500000"  # Limit for testing; adjust as needed
+            query = f"SELECT ledgers.id, ledgers.voucher_id, ledgers.entry_date, ledgers.party_id, sum(CASE WHEN (ledgers.entry_date < '2016-11-17') THEN ledgers.amount ELSE 0 END) AS opening_balance, sum(CASE WHEN (ledgers.entry_date < '2025-11-24') THEN ledgers.amount ELSE 0 END) AS closing_balance, sum(CASE WHEN (ledgers.entry_date >= '2016-11-17' AND ledgers.entry_date <= '2025-11-24' AND ledgers.amount > 0) THEN ledgers.amount ELSE 0 END) AS transaction_balance_debit, sum(CASE WHEN (ledgers.entry_date >= '2016-11-17' AND ledgers.entry_date <= '2025-11-24' AND ledgers.amount < 0) THEN ledgers.amount ELSE 0 END) AS transaction_balance_credit FROM prism.ledgers WHERE ledgers.inactive = 0 AND ledgers.deleted = 0 AND ledgers.party_id IS NOT NULL AND ledgers.entry_date <= '2025-11-24' group by ledgers.id, ledgers.voucher_id, ledgers.entry_date, ledgers.party_id limit 100;"
             cursor.execute(query)
 
              # Fetch column headers

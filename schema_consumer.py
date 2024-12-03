@@ -70,17 +70,17 @@ def create_single_partitioned_hive_table(conn:hive.Connection, schema:Schema):
                
                 hive_type = mysql_to_hive_types.get(data_type, 'STRING')
 
-                if hive_type.upper() == "DATE":
-                    partition_cols.append(column_name)
-                else:
-                    create_stmt += f"{column_name} {hive_type.upper()}, "
+                # if hive_type.upper() == "DATE":
+                #     partition_cols.append(column_name)
+                # else:
+                create_stmt += f"{column_name} {hive_type.upper()}, "
         
             create_stmt = create_stmt.rstrip(", ") 
-            if partition_cols:
-                partition = ", ".join([f"{col} DATE" for col in partition_cols])
-                create_stmt += f") PARTITIONED BY ({partition})"
-            else:
-                create_stmt += ")"
+            # if partition_cols:
+            #     partition = ", ".join([f"{col} DATE" for col in partition_cols])
+            #     create_stmt += f") PARTITIONED BY ({partition})"
+            # else:
+            create_stmt += ")"
             
             create_stmt += " STORED AS ORC"
             print(f"*********Table created successfully.{create_stmt}")

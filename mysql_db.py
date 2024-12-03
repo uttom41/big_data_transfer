@@ -250,13 +250,15 @@ import mysql.connector
 
 
 def main():
+    database_name = "prism"
     mysql_config = {
         "host": "192.168.10.58",
         "user": "root",
         "password": "12345678",
-        "database": "prism",
+        "database": database_name,
         "port": 3306,
     }
+
     # conn, cursor = create_connection("prism")
     # schema:Schema = get_mysql_schema(mysql_config)
     # create_single_partitioned_hive_table(conn,schema)
@@ -281,9 +283,9 @@ def main():
     #     """, (mysql_config['database'],))
     # tables = cursor.fetchall()
     # skip_tables = {'attendance_status', 'currencies', 'django_celery_beat_periodictasks','django_session'}
-    # 'inventory_journals', 'products', 'vouchers', 'items', 'inventories', 'parties'
+    # 'ledgers', 'inventory_journals', 'products', 'vouchers', 'items', 'inventories', 'parties'
 
-    tables = ['ledgers']
+    tables = ['ledgers', 'inventory_journals', 'products', 'vouchers', 'items', 'inventories']
 
     for table_name in tables:
         if table_name == 'authorization':
@@ -295,7 +297,7 @@ def main():
 
         # query = f"SELECT * FROM {table_name} ORDER BY id ASC LIMIT {start_value} OFFSET {offset_value}"
         # export_mysql_to_orc(mysql_config,query=query,orc_file_path=f"output/{table_name}.orc")
-        export_mysql_to_orc_spark(orc_file_path=f"{table_name}",table_name=table_name)
+        export_mysql_to_orc_spark(orc_file_path=f"{table_name}",table_name=table_name,database_name=database_name)
 
         # row_count_query = f"SELECT COUNT(*) FROM {table_name}"
         # cursor.execute(row_count_query)
@@ -306,7 +308,6 @@ def main():
         # if row_count_value ==0:
         #     continue
 
-        # print(f"Table name {table_name}")
         # # query = f"SELECT * FROM attendance ORDER BY id ASC LIMIT 400000 OFFSET 1210100"
         # offset_value=0
         # while row_count_value > offset_value:

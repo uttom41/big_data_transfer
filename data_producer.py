@@ -1,3 +1,4 @@
+from ast import Str
 import os
 import mysql.connector
 import pandas as pd
@@ -184,7 +185,7 @@ def get_hive_column_type(data_type):
     return mysql_to_hive_types.get(data_type.upper(), 'STRING')
 
 
-def export_mysql_to_orc_spark(orc_file_path,table_name):
+def export_mysql_to_orc_spark(orc_file_path,table_name,database_name):
     # Initialize SparkSession
     spark = SparkSession.builder \
         .appName("spark_convert") \
@@ -194,7 +195,7 @@ def export_mysql_to_orc_spark(orc_file_path,table_name):
         .enableHiveSupport() \
         .getOrCreate()
     
-    mysql_url = "jdbc:mysql://192.168.10.58:3306/prism"
+    mysql_url = f"jdbc:mysql://192.168.10.58:3306/{database_name}"
     mysql_properties = {
         "user": "root",
         "password": "12345678",
@@ -203,7 +204,7 @@ def export_mysql_to_orc_spark(orc_file_path,table_name):
     mysql_table_name = table_name
 
     # Read the schema of the MySQL table using Spark
-    describe_result = spark.sql(f"DESCRIBE FORMATTED prism.{mysql_table_name}").collect()
+    describe_result = spark.sql(f"DESCRIBE FORMATTED {database_name}.{mysql_table_name}").collect()
 
     # Mapping column types dynamically
     column_type_mapping = {}
@@ -242,18 +243,18 @@ def export_mysql_to_orc_spark(orc_file_path,table_name):
 
     # Extract partition columns from the MySQL table schema
     partition_columns = []
-    start_partition = False
-    print(f"Table name: {mysql_table_name}")
-    for row in describe_result:
-        col_name, data_type, _ = row.col_name.strip(), row.data_type.strip(), row.comment
-        if col_name == "# Partition Information":
-            start_partition = True
-            continue
-        if start_partition:
-            if col_name == "# Detailed Table Information":
-                break
-            if col_name and not col_name.startswith("#") and data_type != "NULL":
-                partition_columns.append(col_name)
+    # start_partition = False
+    # print(f"Table name: {mysql_table_name}")
+    # for row in describe_result:
+    #     col_name, data_type, _ = row.col_name.strip(), row.data_type.strip(), row.comment
+    #     if col_name == "# Partition Information":
+    #         start_partition = True
+    #         continue
+    #     if start_partition:
+    #         if col_name == "# Detailed Table Information":
+    #             break
+    #         if col_name and not col_name.startswith("#") and data_type != "NULL":
+    #             partition_columns.append(col_name)
 
     # Write the data to Hive, partitioned by the identified partition columns
     if partition_columns:
@@ -261,11 +262,11 @@ def export_mysql_to_orc_spark(orc_file_path,table_name):
                 .mode("append") \
                 .partitionBy(*partition_columns) \
                 .option("path", orc_file_path) \
-                .saveAsTable(f"prism.{mysql_table_name}")
+                .saveAsTable(f"{database_name}.{mysql_table_name}")
     else:
         df.write.format("hive") \
                 .mode("append") \
-                .saveAsTable(f"prism.{mysql_table_name}")
+                .saveAsTable(f"{database_name}.{mysql_table_name}")
 
     print(f"Data successfully exported to ORC and Hive for table {mysql_table_name}.")
 
