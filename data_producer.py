@@ -1,4 +1,4 @@
-from ast import Str
+import json
 import os
 import mysql.connector
 import pandas as pd
@@ -7,9 +7,11 @@ import pyarrow.orc as orc
 from decimal import Decimal 
 import numpy as np
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import when, col, regexp_extract
-from pyspark.sql.types import StringType, BooleanType, IntegerType,DecimalType,TimestampType,DateType
-
+from pyspark.sql.functions import when, col, regexp_extract,current_timestamp,current_date
+from pyspark.sql.types import (
+    ByteType, ShortType, IntegerType, LongType, DecimalType, FloatType, 
+    DoubleType, BooleanType, StringType, DateType, TimestampType, BinaryType
+)
 
 
 
@@ -177,6 +179,33 @@ mysql_to_hive_types = {
     'SET': 'STRING',   # Treat SET as STRING in Hive
 }
 
+mysql_to_hive_spark_types = {
+    'TINYINT': (ByteType(), 'TINYINT'),
+    'SMALLINT': (ShortType(), 'SMALLINT'),
+    'MEDIUMINT': (IntegerType(), 'INT'),
+    'INT': (IntegerType(), 'INT'),
+    'INTEGER': (IntegerType(), 'INT'),
+    'BIGINT': (LongType(), 'BIGINT'),
+    'DECIMAL': (DecimalType(), 'DECIMAL'),
+    'NUMERIC': (DecimalType(), 'DECIMAL'),
+    'FLOAT': (FloatType(), 'FLOAT'),
+    'DOUBLE': (DoubleType(), 'DOUBLE'),
+    'BIT': (BooleanType(), 'BOOLEAN'),
+    'CHAR': (StringType(), 'STRING'),
+    'VARCHAR': (StringType(), 'STRING'),
+    'TEXT': (StringType(), 'STRING'),
+    'DATE': (DateType(), 'DATE'),
+    'DATETIME': (TimestampType(), 'TIMESTAMP'),
+    'TIMESTAMP': (TimestampType(), 'TIMESTAMP'),
+    'TIME': (StringType(), 'STRING'),
+    'YEAR': (StringType(), 'STRING'),  
+    'JSON': (StringType(), 'STRING'), 
+    'BLOB': (BinaryType(), 'BINARY'),
+    'ENUM': (StringType(), 'STRING'), 
+    'SET': (StringType(), 'STRING')  
+}
+
+
 def get_hive_column_type(data_type):
     # Strip any parentheses (e.g., DECIMAL(10,0) to DECIMAL)
     if '(' in data_type:
@@ -195,7 +224,7 @@ def export_mysql_to_orc_spark(orc_file_path,table_name,database_name):
         .enableHiveSupport() \
         .getOrCreate()
     
-    mysql_url = f"jdbc:mysql://192.168.10.58:3306/{database_name}"
+    mysql_url = f"jdbc:mysql://192.168.10.104:3306/{database_name}"
     mysql_properties = {
         "user": "root",
         "password": "12345678",
@@ -230,7 +259,7 @@ def export_mysql_to_orc_spark(orc_file_path,table_name,database_name):
                     when(col(col_name).rlike("^[0-9]+$"), col(col_name).cast(IntegerType())).otherwise(None)
                 )
             elif col_type == "YEAR":
-                df = df.withColumn(col_name, df[col_name].cast(Str()))
+                df = df.withColumn(col_name, df[col_name].cast(ShortType()))
             # elif col_type == "BINARY":
             #     df = df.withColumn(col_name, df[col_name].cast(StringType()))
 
@@ -262,13 +291,26 @@ def export_mysql_to_orc_spark(orc_file_path,table_name,database_name):
                 .mode("append") \
                 .partitionBy(*partition_columns) \
                 .option("path", orc_file_path) \
-                .saveAsTable(f"{database_name}.{mysql_table_name}")
+                .saveAsTable(f"{database_name}.{table_name}")
     else:
         df.write.format("hive") \
                 .mode("append") \
-                .saveAsTable(f"{database_name}.{mysql_table_name}")
+                .saveAsTable(f"{database_name}.{table_name}")
+    metadata_file = './model/execitopm_time'
+    
+    metadata = {}
 
-    print(f"Data successfully exported to ORC and Hive for table {mysql_table_name}.")
+       
+    if os.path.exists(metadata_file):
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+       
+    metadata[table_name] = True
+
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=4)
+    print(f"Data successfully exported to ORC and Hive for table {table_name}.")
 
     
 def send_file_path_to_kafka(file_path, topic,tableName,producer):
@@ -383,3 +425,124 @@ def print_table_schema(table, table_name):
         print(f"Column name: {field.name}, Type: {field.type}")
 
 
+
+def load_data_hive_using_spark(orc_file_path, table_name, database_name):
+    # SparkSession শুরু করা
+    spark = SparkSession.builder \
+        .appName("spark_convert") \
+        .config("spark.sql.warehouse.dir", "/user/hive/warehouse") \
+        .config("spark.executor.memory", "4g") \
+        .config("spark.driver.memory", "4g") \
+        .enableHiveSupport() \
+        .getOrCreate()
+
+    # MySQL JDBC কনফিগারেশন
+    mysql_url = f"jdbc:mysql://192.168.10.58:3306/{database_name}"
+    mysql_properties = {
+        "user": "root",
+        "password": "12345678",
+        "driver": "com.mysql.cj.jdbc.Driver"
+    }
+
+
+    query = f"""
+    SELECT 
+        CAST(birthday AS CHAR) AS birthday, 
+        CAST(entry_date AS CHAR) AS entry_date, 
+        CAST(created AS CHAR) AS created, 
+        CAST(updated AS CHAR) AS updated, 
+        CAST(approved_at AS CHAR) AS approved_at,  -- কাস্ট করা কলামটি এখানে রাখুন
+        id,
+        first_name,
+        last_name,
+        middle_name,
+        full_name,
+        full_name_bn,
+        print_as,
+        title,
+        nick,
+        suffix,
+        gender,
+        marital_status,
+        comment,
+        passport,
+        national_id,
+        phone,
+        alt_phone,
+        email,
+        alt_email,
+        mobile,
+        alt_mobile,
+        fax,
+        website,
+        created_by,
+        updated_by,
+        subtype,
+        role,
+        parent_id,
+        journal_id,
+        branch_id,
+        code,
+        barcode,
+        pin_number,
+        currency,
+        inactive,
+        deleted,
+        type,
+        late_fee_policy_id,
+        religion,
+        religion_id,
+        nationality,
+        father_name,
+        mother_name,
+        spouse,
+        no_of_children,
+        height,
+        weight,
+        blood_group,
+        credit_limit,
+        credit_limit_check,
+        credit_days,
+        blocked,
+        skype,
+        phone_prefix,
+        whatsapp,
+        facebook,
+        party_group_id,
+        credit_days_check,
+        gstin,
+        shipping_gstin,
+        shipping_careof,
+        miscellaneous_data,
+        meter_id,
+        meter_number,
+        bin,
+        etin,
+        service_package_id,
+        service_contract_id,
+        marriage_day,
+        additional_branches_id,
+        alt_mob_prefix,
+        mob_prefix,
+        bank_type,
+        is_approved,
+        approved_by
+    FROM {table_name}
+"""
+    # MySQL থেকে ডেটা লোড করা
+    df = spark.read.jdbc(
+        url=mysql_url, 
+        table=f"({query}) AS temp_table", 
+        properties=mysql_properties)
+
+    # টাইপ কনভার্সন
+    date_columns = ["birthday", "entry_date", "created", "updated", "approved_at"]
+    for column in date_columns:
+        if column in df.columns:
+            df = df.withColumn(column, col(column).cast("timestamp"))
+
+    # Hive এ সেভ
+    df.write.format("orc").mode("overwrite").save(orc_file_path)
+    df.write.format("hive").mode("overwrite").saveAsTable(f"{database_name}.{table_name}")
+
+    print(f"Data successfully exported to ORC and Hive for table {table_name}.")

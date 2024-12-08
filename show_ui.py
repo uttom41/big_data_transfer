@@ -28,20 +28,36 @@ def index():
         # Query the table
         try:
 
+            SPARK_APP_NAME = "HiveDataFetcher"
+            SPARK_MASTER = "spark://192.168.10.58:7077"
+            HIVE_METASTORE_URI = "thrift://192.168.10.58:9083"
+
+            # Initialize Spark session with Hive support
             spark = SparkSession.builder \
-            .appName("ReadHiveData") \
-            .master("local[*]") \
-            .config("spark.sql.catalogImplementation", "hive") \
-            .enableHiveSupport() \
-            .getOrCreate()
+                .appName(SPARK_APP_NAME) \
+                .master(SPARK_MASTER) \
+                .config("spark.executor.memory", "4g") \
+                .config("spark.executor.cores", "2") \
+                .config("spark.sql.warehouse.dir", "/user/hive/warehouse") \
+                .config("spark.hadoop.hive.metastore.uris", HIVE_METASTORE_URI) \
+                .enableHiveSupport() \
+                .getOrCreate()
+
+            # spark = SparkSession.builder \
+            # .appName("ReadHiveData") \
+            # .master("local[*]") \
+            # .config("spark.sql.catalogImplementation", "hive") \
+            # .enableHiveSupport() \
+            # .getOrCreate()
 
             database_name = "prism"
 
             # SQL কোয়েরি তৈরি করুন
            
             # query = f" SELECT * FROM {database_name}.{table_name} WHERE CAST(REGEXP_EXTRACT(working_hour, '^([0-9]+)', 1) AS INT) < 8"
-            # query = f"SELECT entry_date,present_hour,employee_id FROM {database_name}.{table_name} LIMIT 1500000"
-            query = f"SELECT ledgers.id, ledgers.voucher_id, ledgers.entry_date, ledgers.party_id, sum(CASE WHEN (ledgers.entry_date < '2016-11-17') THEN ledgers.amount ELSE 0 END) AS opening_balance, sum(CASE WHEN (ledgers.entry_date < '2025-11-24') THEN ledgers.amount ELSE 0 END) AS closing_balance, sum(CASE WHEN (ledgers.entry_date >= '2016-11-17' AND ledgers.entry_date <= '2025-11-24' AND ledgers.amount > 0) THEN ledgers.amount ELSE 0 END) AS transaction_balance_debit, sum(CASE WHEN (ledgers.entry_date >= '2016-11-17' AND ledgers.entry_date <= '2025-11-24' AND ledgers.amount < 0) THEN ledgers.amount ELSE 0 END) AS transaction_balance_credit FROM prism.ledgers WHERE ledgers.inactive = 0 AND ledgers.deleted = 0 AND ledgers.party_id IS NOT NULL AND ledgers.entry_date <= '2025-11-24' group by ledgers.id, ledgers.voucher_id, ledgers.entry_date, ledgers.party_id limit 100;"
+            query = f"select * from {database_name}.parties ORDER BY id ASC LIMIT 2 OFFSET 2"
+            # query = f"SELECT * FROM {database_name}.{table_name}
+            # query = f"SELECT ledgers.id, ledgers.voucher_id, ledgers.entry_date, ledgers.party_id, sum(CASE WHEN (ledgers.entry_date < '2016-11-17') THEN ledgers.amount ELSE 0 END) AS opening_balance, sum(CASE WHEN (ledgers.entry_date < '2025-11-24') THEN ledgers.amount ELSE 0 END) AS closing_balance, sum(CASE WHEN (ledgers.entry_date >= '2016-11-17' AND ledgers.entry_date <= '2025-11-24' AND ledgers.amount > 0) THEN ledgers.amount ELSE 0 END) AS transaction_balance_debit, sum(CASE WHEN (ledgers.entry_date >= '2016-11-17' AND ledgers.entry_date <= '2025-11-24' AND ledgers.amount < 0) THEN ledgers.amount ELSE 0 END) AS transaction_balance_credit FROM prism.ledgers WHERE ledgers.inactive = 0 AND ledgers.deleted = 0 AND ledgers.party_id IS NOT NULL AND ledgers.entry_date <= '2025-11-24' group by ledgers.id, ledgers.voucher_id, ledgers.entry_date, ledgers.party_id;"
 
             # Spark DataFrame-এ কোয়েরি চালান
             df_spark = spark.sql(query)

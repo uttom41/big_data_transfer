@@ -16,3 +16,4 @@ __pycache__/
 __pycache__/data_producer.cpython-312.pyc
 *.pyc
 
+logs/

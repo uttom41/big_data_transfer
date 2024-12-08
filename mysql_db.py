@@ -7,7 +7,7 @@ from model.schems import Schema
 from schema_producer import get_mysql_schema
 from hive_connection import create_connection
 from schema_consumer import create_single_partitioned_hive_table
-from data_producer import export_mysql_to_orc,export_mysql_to_orc_spark
+from data_producer import export_mysql_to_orc,export_mysql_to_orc_spark,load_data_hive_using_spark
 import mysql.connector
 
 # # Paths
@@ -276,28 +276,45 @@ def main():
     # offset_value+=start_value
 
 
-    # cursor.execute("""
-    #     SELECT table_name 
-    #     FROM information_schema.tables 
-    #     WHERE table_schema = %s AND table_type = 'BASE TABLE'
-    #     """, (mysql_config['database'],))
-    # tables = cursor.fetchall()
-    # skip_tables = {'attendance_status', 'currencies', 'django_celery_beat_periodictasks','django_session'}
+    cursor.execute("""
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = %s AND table_type = 'BASE TABLE'
+        """, (mysql_config['database'],))
+    tables = cursor.fetchall()
+    metadata = {}
+
+    metadata_file = './model/execitopm_time'   
+    if os.path.exists(metadata_file):
+        with open(metadata_file, 'r') as f:
+            metadata = json.load(f)
+
+    skip_tables = {'attendance_status', 'currencies', 'django_celery_beat_periodictasks','django_session','ledgers',
+                'inventory_journals', 'products', 'vouchers', 'items', 'inventories', 'parties', 'activity_logs','custom_vouchers',
+                'employment_types', 'features', 'groups', 'histories', 'im_colors', 'im_connectivity_type','im_device_type',
+                'im_fiber_core','im_network_type','leave_balance','lms_books','prod_events','prod_si_ancestors','prod_unit_ancestors',
+                'raw_pos_sale_orders','report_download_logs','report_print_count_logs','schedule_attendance','service_package_products',
+                'service_updown_requests','stationery_ledgers','voucher_outlines'
+                }
     # 'ledgers', 'inventory_journals', 'products', 'vouchers', 'items', 'inventories', 'parties'
 
-    tables = ['ledgers', 'inventory_journals', 'products', 'vouchers', 'items', 'inventories']
+    # tables = ['parties']
+    skip_tables.update(metadata)
+   
 
     for table_name in tables:
+        table_name =table_name[0]
         if table_name == 'authorization':
             table_name = f"`{table_name}`"
-        # if table_name in skip_tables:
-        #     continue
+        if table_name in skip_tables:
+            continue
     
-        print(f"Table name {table_name}")
+        print(f"Table name: {table_name}")
 
         # query = f"SELECT * FROM {table_name} ORDER BY id ASC LIMIT {start_value} OFFSET {offset_value}"
         # export_mysql_to_orc(mysql_config,query=query,orc_file_path=f"output/{table_name}.orc")
         export_mysql_to_orc_spark(orc_file_path=f"{table_name}",table_name=table_name,database_name=database_name)
+        # load_data_hive_using_spark(orc_file_path=f"{table_name}",table_name=table_name,database_name=database_name)
 
         # row_count_query = f"SELECT COUNT(*) FROM {table_name}"
         # cursor.execute(row_count_query)
