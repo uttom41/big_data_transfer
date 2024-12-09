@@ -51,26 +51,18 @@ def export_mysql_to_orc_spark(orc_file_path,table_name,database_name):
     .config("spark.hadoop.fs.defaultFS", "file:///") \
     .getOrCreate()
     
-    mysql_url = f"jdbc:mysql://192.168.10.104:3306/{database_name}"
+    mysql_url = f"jdbc:mysql://182.48.72.82:3306/{database_name}"
     mysql_properties = {
         "user": "root",
         "password": "12345678",
         "driver": "com.mysql.cj.jdbc.Driver"
     }
-    mysql_table_name = table_name
-
-    describe_result = spark.sql(f"DESCRIBE FORMATTED {database_name}.{mysql_table_name}").collect()
-
-    column_type_mapping = {}
-    for row in describe_result:
-        col_name, data_type, is_nullable = row.col_name.strip(), row.data_type.strip(), row.comment
-        if col_name and data_type != "NULL":
-            hive_type = get_hive_column_type(data_type)
-            column_type_mapping[col_name] = hive_type
-
-    df = spark.read.jdbc(url=mysql_url, table=mysql_table_name, properties=mysql_properties)
+     
+    df = spark.read.jdbc(url=mysql_url, table=table_name, properties=mysql_properties)
+    column_type_mapping = {field.name: field.dataType.simpleString() for field in df.schema.fields}
 
     for col_name, col_type in column_type_mapping.items():
+        hive_type = get_hive_column_type(col_type)
         if col_name in df.columns:
             if col_type == 'DECIMAL':
                 df = df.withColumn(col_name, df[col_name].cast(DecimalType()))
@@ -110,9 +102,9 @@ def export_mysql_to_orc_spark(orc_file_path,table_name,database_name):
 
 
 def main():
-    database_name = "prism"
+    database_name = "kiam_db"
     mysql_config = {
-        "host": "192.168.10.104",
+        "host": "182.48.72.82",
         "user": "root",
         "password": "12345678",
         "database": database_name,
