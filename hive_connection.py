@@ -16,12 +16,15 @@ def create_connection(database_name:str):
         # transport = TFramedTransport(socket)
         # protocol = TBinaryProtocol(transport)
         conn = hive.Connection(
-            host='localhost', 
+            host='182.48.72.82', 
             port=10000, 
-            username='uttom41', 
+            username='root', 
             auth='NONE'
         )
         cursor = conn.cursor()
+        cursor.execute("SHOW DATABASES")
+        databases = cursor.fetchall()
+        print(databases)
 
         cursor.execute(f"SHOW DATABASES LIKE '{database_name}'")
         databases = cursor.fetchall()

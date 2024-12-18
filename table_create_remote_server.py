@@ -140,8 +140,8 @@ def main():
     }
     conn, cursor = create_connection(database_name)
 
-    schema:Schema = get_mysql_schema(mysql_config)
-    create_single_partitioned_hive_table(conn=conn,schema=schema)
+    # schema:Schema = get_mysql_schema(mysql_config)
+    # create_single_partitioned_hive_table(conn=conn,schema=schema)
 
 
 
