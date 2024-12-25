@@ -5,8 +5,34 @@ from hive_connection import create_connection
 from pyhive import hive
 
 
-mysql_to_hive_types = {
-    'TINYINT': 'TINYINT',
+# mysql_to_hive_types = {
+#     'TINYINT': 'TINYINT',
+#     'SMALLINT': 'SMALLINT',
+#     'MEDIUMINT': 'INT',
+#     'INT': 'INT',
+#     'INTEGER': 'INT',
+#     'BIGINT': 'BIGINT',
+#     'DECIMAL': 'DECIMAL',
+#     'NUMERIC': 'DECIMAL',
+#     'FLOAT': 'FLOAT',
+#     'DOUBLE': 'DOUBLE',
+#     'BIT': 'BOOLEAN',
+#     'CHAR': 'STRING',
+#     'VARCHAR': 'STRING',
+#     'TEXT': 'STRING',
+#     'DATE': 'DATE',
+#     'DATETIME': 'TIMESTAMP',
+#     'TIMESTAMP': 'TIMESTAMP',
+#     'TIME': 'STRING',  # Hive does not have a specific TIME type
+#     'YEAR': 'STRING',  # Hive does not have a specific YEAR type
+#     'JSON': 'STRING',  # Hive does not have a specific JSON type
+#     'BLOB': 'BINARY',
+#     'ENUM': 'STRING',  # Treat ENUM as STRING in Hive
+#     'SET': 'STRING',   # Treat SET as STRING in Hive
+# }
+
+mysql_to_hive_trino_types = {
+    'TINYINT': 'SMALLINT',
     'SMALLINT': 'SMALLINT',
     'MEDIUMINT': 'INT',
     'INT': 'INT',
@@ -23,13 +49,14 @@ mysql_to_hive_types = {
     'DATE': 'DATE',
     'DATETIME': 'TIMESTAMP',
     'TIMESTAMP': 'TIMESTAMP',
-    'TIME': 'STRING',  # Hive does not have a specific TIME type
-    'YEAR': 'STRING',  # Hive does not have a specific YEAR type
-    'JSON': 'STRING',  # Hive does not have a specific JSON type
+    'TIME': 'STRING',
+    'YEAR': 'STRING',
+    'JSON': 'STRING',
     'BLOB': 'BINARY',
-    'ENUM': 'STRING',  # Treat ENUM as STRING in Hive
-    'SET': 'STRING',   # Treat SET as STRING in Hive
+    'ENUM': 'STRING',
+    'SET': 'STRING',
 }
+
 
 
 def get_mysql_schema(mysql_config):
@@ -103,7 +130,7 @@ def create_single_partitioned_hive_table(conn:hive.Connection, schema:Schema):
                 if '(' in data_type:
                     data_type = data_type.split('(')[0].strip()
                
-                hive_type = mysql_to_hive_types.get(data_type, 'STRING')
+                hive_type = mysql_to_hive_trino_types.get(data_type, 'STRING')
                 create_stmt += f"{column_name} {hive_type.upper()}, "
         
             create_stmt = create_stmt.rstrip(", ") 
@@ -130,18 +157,18 @@ def create_single_partitioned_hive_table(conn:hive.Connection, schema:Schema):
 
 
 def main():
-    database_name = "kiam_db"
+    database_name = "kiam_db_final"
     mysql_config = {
         "host": "182.48.72.82",
         "user": "root",
         "password": "12345678",
-        "database": database_name,
+        "database": "kiam_db",
         "port": 3306,
     }
     conn, cursor = create_connection(database_name)
 
-    # schema:Schema = get_mysql_schema(mysql_config)
-    # create_single_partitioned_hive_table(conn=conn,schema=schema)
+    schema:Schema = get_mysql_schema(mysql_config)
+    create_single_partitioned_hive_table(conn=conn,schema=schema)
 
 
 

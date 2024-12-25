@@ -2,21 +2,33 @@ from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, when
 import mysql.connector
 
+
 # Initialize Spark session with Hive support
 spark = SparkSession.builder \
-    .appName("MySQL to Hive") \
+    .appName("Create Database and Table Example") \
     .config("spark.sql.warehouse.dir", "/user/hive/warehouse") \
+    .master("spark://182.48.72.82:7077") \
     .config("spark.sql.hive.metastore.uris", "thrift://182.48.72.82:9083") \
-    .config("spark.hadoop.hive.metastore.client.factory.class", "org.apache.hadoop.hive.ql.metadata.SessionHiveMetaStoreClientFactory") \
     .config("spark.sql.catalogImplementation", "hive") \
+    .config("hive.metastore.schema.verification", "true")\
     .enableHiveSupport() \
     .getOrCreate()
 
+
 spark.catalog.clearCache()
+spark.sql("SHOW DATABASES").show()
+# spark.sql("SHOW TABLES IN kiam_db").show()
+
+# database_name = "kiam_db"
+# spark.sql(f"CREATE DATABASE IF NOT EXISTS {database_name}")
+# print(f"Database '{database_name}' created successfully!")
+
+# # Step 2: Use the new database
+# spark.sql(f"USE {database_name}")
 
 # Create database in Hive if it doesn't exist
 # spark.sql("CREATE DATABASE IF NOT EXISTS prism_db")
-spark.sql("SHOW DATABASES").show()
+
 
 # # Set the database in Hive
 # tables = spark.sql("SHOW TABLES IN kiam_db")
