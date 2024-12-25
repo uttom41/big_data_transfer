@@ -101,8 +101,7 @@ def export_mysql_to_orc_spark(orc_file_path, table_name, database_name, min_id,m
                 df = df.withColumn(col_name, df[col_name].cast(hive_type))
 
     output_path = os.path.join(orc_file_path, f"{num_partitions}_full.orc")
-    os.makedirs(output_path, exist_ok=True)
-    df.write.format("orc").mode("overwrite").save(orc_file_path)
+    df.write.format("orc").mode("overwrite").save(output_path)
 
     metadata_file = './model/execution_time.json'
     metadata = {}
