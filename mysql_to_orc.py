@@ -9,10 +9,16 @@ from pyspark.sql.functions import when, col
 from pyspark.sql.types import ShortType, IntegerType, DecimalType, TimestampType
 
 
-# Set up logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("mysql_to_orc_generate.log"),
+        logging.StreamHandler()
+    ]
+)
 
 mysql_to_hive_trino_types = {
     'TINYINT': 'SMALLINT',
@@ -46,13 +52,15 @@ def get_hive_column_type(data_type):
 
 def export_mysql_to_orc_spark(orc_file_path, table_name, database_name, min_id,max_id,num_partitions):
 
-    os.makedirs(orc_file_path, exist_ok=True)
+    #os.makedirs(orc_file_path, exist_ok=True)
     
     spark = SparkSession.builder \
         .appName("Save ORC Locally") \
         .master("local[*]") \
-        .config("spark.executor.memory", "16g") \
-        .config("spark.driver.memory", "16g") \
+        .config("spark.executor.memory", "20g") \
+        .config("spark.driver.memory", "20g") \
+        .config("spark.sql.orc.impl", "native") \
+        .config("spark.sql.orc.compression.codec", "snappy") \
         .config("spark.jars", "/root/Downloads/mysql-connector-j-8.1.0/mysql-connector-j-8.1.0.jar") \
         .getOrCreate()
 
@@ -100,10 +108,10 @@ def export_mysql_to_orc_spark(orc_file_path, table_name, database_name, min_id,m
             else:
                 df = df.withColumn(col_name, df[col_name].cast(hive_type))
 
-    output_path = os.path.join(orc_file_path, f"{num_partitions}_full.orc")
-    df.write.format("orc").mode("overwrite").save(output_path)
+    df.write.format("orc").mode("overwrite").save(orc_file_path)
 
-    metadata_file = './model/execution_time.json'
+    #metadata_file = './model/execution_time.json'
+    metadata_file = './table_status'
     metadata = {}
 
     if os.path.exists(metadata_file):
@@ -137,8 +145,8 @@ def main():
         """, (mysql_config['database'],))
     tables = cursor.fetchall()
 
-    metadata_file = './model/execution_time.json'
-    #metadata_file = './table_status'
+    #metadata_file = './model/execution_time.json'
+    metadata_file = './table_status'
     metadata = {}
 
     if os.path.exists(metadata_file):
@@ -160,24 +168,24 @@ def main():
             cursor.execute(query)
             min_max_data = cursor.fetchone()
         except ProgrammingError:
-            logger.info(f"Skipping table: {table_name}, Reason: 'id' column not found.")
+            logging.info(f"Skipping table: {table_name}, Reason: 'id' column not found.")
             continue 
 
         if not min_max_data or min_max_data[0] is None or min_max_data[1] is None:
-            logger.info(f"Skipping table: {table_name}, No valid data in 'id' column.")
+            logging.info(f"Skipping table: {table_name}, No valid data in 'id' column.")
             continue 
 
         min_id = min_max_data[0]
         max_id = min_max_data[1]
         total_rows = max_id - min_id + 1
         num_partitions= 1
-        if  max_id > 5000000:
-           num_partitions = max(1, total_rows // 5000000)
+        if  max_id > 1000000:
+           num_partitions = max(1, total_rows // 1000000)
        
-        logger.info(f"Processing table: {table_name}")
-        # orc_file_path=f"file:///root/Documents/hdfs/output/{table_name}",
+        logging.info(f"Processing table: {table_name}")
+        orc_file_path=f"file:///root/Documents/hdfs/output/{table_name}"
         export_mysql_to_orc_spark(
-            orc_file_path=f"./output/{table_name}",
+            orc_file_path=orc_file_path,
             table_name=table_name,
             database_name=database_name,
             min_id=min_id,
@@ -187,6 +195,6 @@ def main():
 
     end_time = time.time()
     execution_time = end_time - start_time
-    logger.info(f"Total execution time: {execution_time:.2f} seconds")
+    logging.info(f"Total execution time: {execution_time:.2f} seconds")
 if __name__ == "__main__":
     main()
