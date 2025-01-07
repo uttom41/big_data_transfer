@@ -6,6 +6,8 @@ import json
 import socket
 from kafka.admin import KafkaAdminClient
 from pyhive import hive
+import time
+
 
 
 # Kafka Connect REST API URL
@@ -27,7 +29,7 @@ MYSQL_CONFIG = {
 KAFKA_CONSUMER_CONFIG = {
     "bootstrap.servers": "localhost:9092",
     "group.id": GROUP_ID,
-    "auto.offset.reset": "earliest",
+    "auto.offset.reset": "latest",
     'fetch.max.bytes': 10485760,
     'max.partition.fetch.bytes': 10485760,
     'enable.auto.commit':True
@@ -83,127 +85,66 @@ def test_mysql_connection():
     except mysql.connector.Error as err:
         print(f"Error: {err}")
 
-def get_all_topics(bootstrap_servers):
-    print("--- Fetch all topic dynamically")
+def consume_kafka_topic_with_dynamic_subscription(consumer, cursor):
+    print("--- Starting dynamic subscription and message consumption ---")
+    
     admin_client = KafkaAdminClient(
-        bootstrap_servers=bootstrap_servers,
+        bootstrap_servers=BOOTSTRAP_SERVERS,
         client_id='admin-client'
     )
-    topics = admin_client.list_topics()
-    admin_client.close()
-    return topics
+    debezium_topics = []
 
-def subscribe_to_all_topics(topics):
-    try:
-        # Initialize KafkaConsumer
-        consumer = KafkaConsumer(
-            bootstrap_servers=BOOTSTRAP_SERVERS,
-            auto_offset_reset='earliest',
-            enable_auto_commit=True,
-            group_id=GROUP_ID
-        )
-        
-        # Filter topics that start with "dbserver1"
-        debezium_topics = [topic for topic in topics if topic.startswith("dbserver1")]
-        
-        # Subscribe to the filtered topics
-        consumer.subscribe(debezium_topics)
-        
-        
-        # print(f"Subscribed to topics: {debezium_topics}")
-        
-        # Return the consumer to fetch messages later
-        return consumer
-    except Exception as e:
-        print(f"Error subscribing to topics: {e}")
-        return None
-
-def consume_kafka_topic(consumer):
-    if consumer:
-        print("Consuming messages...")
-        try:
-            while True:
-                records = consumer.poll(timeout_ms=1000)
-                if not records:
-                    print("No new messages, polling again...")
-                    continue
-
-                for topic_partition, messages in records.items():
-                    print(f"Topic: {topic_partition.topic}, Partition: {topic_partition.partition}")
-
-                    for msg in messages:
-                        message_value = msg.value.decode('utf-8')
-
-                        try:
-                            record = json.loads(message_value)
-                            if 'payload' not in record:
-                                print(f"Skipping non-data message.")
-                                continue
-                            
-                            payload = record.get('payload', {})
-                            if payload:
-                                after_data = payload.get('after')
-                                before_data = payload.get('before')
-                                operation = payload.get('op')
-
-                                if operation == 'c':
-                                    print(f"Insert detected: {after_data}")
-                                    return after_data
-                                elif operation == 'u':
-                                    print(f"Update detected. Before: {before_data}, After: {after_data}")
-                                    return before_data
-                                elif operation == 'd':
-                                    print(f"Delete detected. Before: {before_data}")
-                                else:
-                                    print(f"Unknown operation: {operation}")
-                        except json.JSONDecodeError:
-                            print("Failed to decode message as JSON.")
-        except KeyboardInterrupt:
-            print("Stopped listening to Kafka topic.")
-        finally:
-            consumer.close()
-
-def consume_kafka_topic2(topic_name):
-    consumer = Consumer(KAFKA_CONSUMER_CONFIG)
-    consumer.subscribe([topic_name])
-
-    print(f"Listening to Kafka topic: {topic_name}")
     try:
         while True:
-            msg = consumer.poll(1.0)  # Poll every second
-            if msg is None:
-                continue
-            if msg.error():
-                if msg.error().code() == KafkaError._PARTITION_EOF:
-                    print(f"End of partition reached {msg.topic()} [{msg.partition()}]")
-                elif msg.error():
-                    raise KafkaException(msg.error())
-            else:
-                key = msg.key().decode('utf-8') if msg.key() else None
-                message_value = msg.value().decode('utf-8')
+            # Step 1: Fetch topics dynamically
+            current_topics = admin_client.list_topics()
+            print(current_topics)
+            new_topics = [topic for topic in current_topics if topic.startswith("dbserver1")]
 
-                print(f"Received message: Key={key} Value={message_value}")
+            if set(new_topics) != set(debezium_topics):
+                debezium_topics = new_topics
+                consumer.subscribe(topics=debezium_topics)
+                print(f"Updated subscription to topics: {debezium_topics}")
 
-                record = json.loads(message_value)
-
-                before_data = record.get('before', None)
-                after_data = record.get('after', None)
-
-                if after_data is not None and before_data is None:
-                    print(f"New record inserted: {after_data}")
-                elif after_data is not None and before_data is not None:
-                    if after_data != before_data:
-                         print(f"Record updated: {after_data}")
-                    else:
-                        print("No actual change in the data (update with no changes).")
-                elif after_data is None and before_data is not None:
-                    print(f"Record deleted: {before_data}")
-                else:
-                    print("Unknown operation or unexpected data.")          
+            # Step 2: Consume messages from subscribed topics
+            records = consumer.poll(1000)  # Timeout in milliseconds
+            for topic_partition, messages in records.items():
+                for msg in messages:
+                    process_message(msg, cursor)
+            # Wait before checking for new topics again
+            time.sleep(10)  # Adjust the interval as needed
     except KeyboardInterrupt:
-        print("Stopped listening to Kafka topic.")
+       print("Stopped listening to Kafka topics.")
     finally:
         consumer.close()
+        admin_client.close()
+
+def process_message(msg,cursor):
+    print("Consuming messages...")
+    try:
+        record = json.loads(msg.value.decode('utf-8'))
+        source = record.get('source')
+        if not source:
+            return
+        database = source.get('db', 'unknown')
+        table = source.get('table', 'unknown')
+
+        before_data = record.get('before')
+        after_data = record.get('after')
+
+        if after_data and not before_data:
+            print(f"New record inserted: {after_data}")
+            insert_into_hive(data=after_data, conn=cursor, table=table)
+        elif after_data and before_data and after_data != before_data:
+            print(f"Record updated: {after_data}")
+            insert_into_hive(data=after_data, conn=cursor, table=table)
+        elif before_data and not after_data:
+            print(f"Record deleted: {before_data}")
+            insert_into_hive(data=before_data, conn=cursor, table=table)
+
+    except json.JSONDecodeError as e:
+        print(f"JSON decode error: {e}")
+
 
 def insert_into_hive(data, conn, table="attendance"):
     if not data:
@@ -212,18 +153,22 @@ def insert_into_hive(data, conn, table="attendance"):
 
     # Build a dynamic INSERT query
     columns = ", ".join(data.keys())
-    values = ", ".join(
-        f"'{value}'" if isinstance(value, str) else str(value)
-        for value in data.values()
-    )
-    query = f"INSERT INTO TABLE {table} VALUES ({values})"
+   
+  
+    # values = ', '.join([f"'{v}'" if v is not None else 'NULL' for v in data.values()])
+    # Format values correctly based on their types
+    values = ', '.join([
+        f"'{v}'" if isinstance(v, str) else 'NULL' if v is None else str(v)
+        for v in data.values()
+    ])
+    
+    query = f"INSERT INTO TABLE {table} ({columns}) VALUES ({values})"
 
     print(f"Executing query: {query}")
 
     # Execute the query
-    with conn.cursor() as cursor:
-        cursor.execute(query)
-
+    #with conn.cursor() as cursor:
+    conn.execute(query)
 
 def create_connection(database_name:str):
     try:
@@ -244,42 +189,34 @@ def create_connection(database_name:str):
         raise
 
 def main():
-    # print("--- Checking Zookeeper ---")
-    # check_zookeeper()
+    print("--- Checking Zookeeper ---")
+    check_zookeeper()
 
 
-    # print("\n--- Checking Kafka ---")
-    # check_kafka()
+    print("\n--- Checking Kafka ---")
+    check_kafka()
     
 
-    # print("\n--- Checking Debezium Connector ---")
-    # connector_name = "mysql-connector"
-    # if check_debezium_connector(connector_name):
-    #     print(f"Debezium connector '{connector_name}' is running.")
-    # else:
-    #     print(f"Debezium connector '{connector_name}' is not running.")
+    print("\n--- Checking Debezium Connector ---")
+    connector_name = "mysql-connector"
+    if check_debezium_connector(connector_name):
+        print(f"Debezium connector '{connector_name}' is running.")
+    else:
+        print(f"Debezium connector '{connector_name}' is not running.")
 
 
-    # print("\n--- Testing MySQL Connection ---")
-    # test_mysql_connection()
+    print("\n--- Testing MySQL Connection ---")
+    test_mysql_connection()
+    conn,cursor = create_connection("kiam_db_final")
 
-    # # topics = get_all_topics(BOOTSTRAP_SERVERS)
-    # # consumer = subscribe_to_all_topics(topics=topics)
-
-    # kafka_topic = "dbserver1.kiam_db.attendance"
-    # # consume_kafka_topic(consumer)
-    # data = consume_kafka_topic2(kafka_topic)
-    data = {'id': 37793239, 'employee_id': 2048, 'shift_id': 1, 'branch_id': 1, 'department_id': 41, 'designation_id': 2, 'entry_date': 17532, 'in_out': '15:30 - 23:51', 'in_out_buyer_view': '15:30 - 20:51', 'odd_entry': 0, 'leave_type_id': None, 'taken_days': None, 'deduction_amount': 0.0, 'holiday_policy_id': 1, 'holiday': 0, 'present_hour': 8.35, 'present_hour_buyer_view': 5.35, 'working_hour': 0.0, 'working_hour_buyer_view': 0.0, 'absent': 0, 'short_duration': 0, 'short_presence': 1, 'late': 1, 'late_hour': 10.5, 'over_time': 0.0, 'over_time_buyer_view': 0.0, 'extra_over_time': 0.0, 'extra_over_time_buyer_view': 0.0, 'raw_over_time': 0.0, 'raw_extra_over_time': 0.0, 'comment': None, 'created': '2024-10-20T07:36:56Z', 'created_by': None, 'updated': '2024-10-20T07:41:51Z', 'updated_by': None, 'early_out_hour': 0.0, 'night_shift': 0, 'replacement_leave': None, 'movement_register_id': None, 'wfh': None, 'special_holiday': 0, 'weekends': 0, 'actual_ot': None}
-    conn = create_connection("kiam_db")
-    insert_into_hive(data=data,conn=conn)
-
-
-
-   
-
+    consumer = KafkaConsumer(
+            bootstrap_servers=BOOTSTRAP_SERVERS,
+            auto_offset_reset='latest',
+            enable_auto_commit=True,
+            group_id=GROUP_ID
+        )
+    consume_kafka_topic_with_dynamic_subscription(consumer, cursor)
 
 if __name__ == "__main__":
     main()
-
-
 
